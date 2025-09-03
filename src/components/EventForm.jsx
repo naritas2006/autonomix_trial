@@ -1,46 +1,58 @@
 import React, { useState } from 'react';
+import { useWallet } from '../context/WalletContext';
 
-export default function EventForm() {
+export default function EventForm({ refreshEvents }) {
+  const { wallet, contract } = useWallet();
+  const [vehicleId, setVehicleId] = useState('');
   const [eventType, setEventType] = useState('');
-  const [zone, setZone] = useState('');
+  const [ipfsHash, setIpfsHash] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Submitting event:', eventType, zone);
-    // Call smart contract's reportEvent() here
+    if (!wallet) return alert('Connect your wallet first!');
+    if (!contract) return alert('Contract not loaded');
+
+    try {
+      const tx = await contract.logEvent(vehicleId, eventType, ipfsHash);
+      await tx.wait();
+      alert('Event logged successfully!');
+      setVehicleId('');
+      setEventType('');
+      setIpfsHash('');
+      refreshEvents(); // optionally refresh dashboard
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      alert('Transaction failed. Check console.');
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white/70 backdrop-blur p-6 rounded-xl space-y-4">
-      <h3 className="text-xl font-semibold text-blush">📍 Report Road Event</h3>
-
-      <select
+    <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto">
+      <h2 className="text-xl font-bold text-center text-blush">Log New Road Event</h2>
+      <input
+        type="text"
+        placeholder="Vehicle ID / Zone"
+        value={vehicleId}
+        onChange={(e) => setVehicleId(e.target.value)}
+        className="w-full p-2 border border-violet rounded"
+        required
+      />
+      <input
+        type="text"
+        placeholder="Event Type"
         value={eventType}
         onChange={(e) => setEventType(e.target.value)}
-        className="w-full p-2 border border-borderLight rounded-md"
+        className="w-full p-2 border border-violet rounded"
         required
-      >
-        <option value="">Select Event Type</option>
-        <option value="Pothole">Pothole</option>
-        <option value="Accident">Accident</option>
-        <option value="Fog">Fog</option>
-        <option value="Construction">Construction</option>
-      </select>
-
-      <select
-        value={zone}
-        onChange={(e) => setZone(e.target.value)}
-        className="w-full p-2 border border-borderLight rounded-md"
-        required
-      >
-        <option value="">Select Location</option>
-        <option value="Zone A">Zone A</option>
-        <option value="Zone B">Zone B</option>
-        <option value="Zone C">Zone C</option>
-      </select>
-
-      {/* Future: add image upload → IPFS */}
-      <button type="submit" className="w-full py-2 bg-blush text-white rounded-lg hover:brightness-110">
+      />
+      <input
+        type="text"
+        placeholder="IPFS Hash (optional)"
+        value={ipfsHash}
+        onChange={(e) => setIpfsHash(e.target.value)}
+        className="w-full p-2 border border-violet rounded"
+      />
+      <button type="submit" className="w-full py-2 bg-blush text-white rounded-lg hover:brightness-110 transition">
         Submit Event
       </button>
     </form>
