@@ -3,7 +3,7 @@ import AutonomixDataShareABI from "../../autonomix-contracts/artifacts/contracts
 
 // Local Hardhat network
 const HARDHAT_CHAIN_ID = "0x7A69"; // 31337 in hex
-const CONTRACT_ADDRESS = "PASTE_YOUR_DEPLOYED_ADDRESS_HERE";
+const CONTRACT_ADDRESS = "0xdF3e18d64BC6A983f673Ab319CCaE4f1a57C7097";
 
 export async function connectWallet() {
   if (typeof window.ethereum !== "undefined") {

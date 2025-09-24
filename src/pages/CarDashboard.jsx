@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useWallet } from '../context/WalletContext';
 import EventForm from '../components/EventForm';
+import DebugEvents from '../pages/DebugEvents';
+
 
 const fadeIn = {
   initial: { opacity: 0, y: 20 },
@@ -13,34 +15,61 @@ export default function CarDashboard() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch events from contract
+  // --- FETCH EVENTS SAFELY ---
   const fetchEvents = async () => {
     if (!contract) return;
     setLoading(true);
+
     try {
-      const total = await contract.totalEvents();
+      const totalBN = await contract.totalEvents(); // ethers.BigNumber
+      const total = Number(totalBN); // convert BigNumber to JS number
+
       const loadedEvents = [];
+
       for (let i = 0; i < total; i++) {
         const e = await contract.getEvent(i);
+
+        // SAFELY extract fields from ethers v6 Typed object
         loadedEvents.push({
-          vehicleId: e.vehicleId,
-          eventType: e.eventType,
-          ipfsHash: e.ipfsHash,
-          timestamp: new Date(e.timestamp * 1000).toLocaleString()
+          vehicleId: e.vehicleId?.toString() || '',
+          eventType: e.eventType || '',
+          ipfsHash: e.ipfsHash || '',
+          timestamp: e.timestamp
+            ? new Date(Number(e.timestamp) * 1000).toLocaleString()
+            : ''
         });
       }
+
+      console.log('Loaded events:', loadedEvents); // DEBUG
       setEvents(loadedEvents);
     } catch (error) {
       console.error('Error fetching contract data:', error);
     }
+
     setLoading(false);
   };
 
-  // Fetch events whenever wallet or contract changes
+  // --- TEST EVENT (optional, just logs first event) ---
+  const testEvent = async () => {
+    if (!contract) return;
+    try {
+      const e = await contract.getEvent(0);
+      console.log('Test event raw:', e);
+    } catch (error) {
+      console.error('Test event error:', error);
+    }
+  };
+
+  // --- EFFECTS ---
+  useEffect(() => {
+    testEvent();
+  }, [contract]);
+
   useEffect(() => {
     if (wallet && contract) fetchEvents();
   }, [wallet, contract]);
 
+  // --- RENDER ---
   return (
     <div className="min-h-screen bg-soft-gradient text-violet font-sans px-6 py-12">
       <motion.h1 className="text-4xl font-bold text-center text-blush mb-10" {...fadeIn}>
@@ -78,6 +107,7 @@ export default function CarDashboard() {
           <EventForm onEventSubmitted={fetchEvents} />
           <div className="mt-8">
             <h2 className="text-2xl font-bold text-center text-blush mb-4">🕓 Event History</h2>
+
             {loading ? (
               <p className="text-center text-white">Loading events...</p>
             ) : (

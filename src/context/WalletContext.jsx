@@ -11,14 +11,45 @@ export function WalletProvider({ children }) {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
 
-  // Connect MetaMask
+  const HARDHAT_CHAIN_ID = '0x7A69'; // 31337 in hex
+
+  // Switch MetaMask network to Hardhat localhost
+  const switchToHardhat = async () => {
+    if (!window.ethereum) return;
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: HARDHAT_CHAIN_ID }],
+      });
+    } catch (switchError) {
+      // If network not added, add it
+      if (switchError.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: HARDHAT_CHAIN_ID,
+            chainName: 'Hardhat Localhost',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['http://127.0.0.1:8545'],
+            blockExplorerUrls: null,
+          }],
+        });
+      } else {
+        console.error('Failed to switch network:', switchError);
+      }
+    }
+  };
+
+  // Connect MetaMask wallet
   const connectWallet = async () => {
-    if (typeof window.ethereum === 'undefined') {
+    if (!window.ethereum) {
       alert('MetaMask not found! Install MetaMask extension.');
       return;
     }
 
     try {
+      await switchToHardhat(); // Ensure correct network
+
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const _provider = new ethers.BrowserProvider(window.ethereum);
       const _signer = await _provider.getSigner();
@@ -41,28 +72,26 @@ export function WalletProvider({ children }) {
     }
   };
 
-  // Disconnect MetaMask (resets all state)
+  // Disconnect wallet
   const disconnectWallet = async () => {
-  setWallet(null);
-  setContract(null);
-  setSigner(null);
-  setProvider(null);
-
-  // Optional: tell MetaMask to disconnect site
-  if (window.ethereum?.request) {
-    try {
-      await window.ethereum.request({
-        method: 'wallet_requestPermissions',
-        params: [{ eth_accounts: {} }]
-      });
-    } catch (err) {
-      console.error('Failed to reset MetaMask connection:', err);
+    setWallet(null);
+    setContract(null);
+    setSigner(null);
+    setProvider(null);
+    // Optional: reset permissions in MetaMask
+    if (window.ethereum?.request) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch (err) {
+        console.error('Failed to reset MetaMask connection:', err);
+      }
     }
-  }
-};
+  };
 
-
-  // Detect account change in MetaMask
+  // Detect account change
   useEffect(() => {
     if (window.ethereum) {
       const handleAccountsChanged = (accounts) => {
@@ -74,10 +103,19 @@ export function WalletProvider({ children }) {
         }
       };
 
+      const handleChainChanged = (_chainId) => {
+        if (_chainId !== HARDHAT_CHAIN_ID) {
+          console.warn('Switched to wrong network, reconnecting...');
+          switchToHardhat();
+        }
+      };
+
       window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
 
       return () => {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
       };
     }
   }, []);
@@ -90,7 +128,7 @@ export function WalletProvider({ children }) {
         signer,
         contract,
         connectWallet,
-        disconnectWallet
+        disconnectWallet,
       }}
     >
       {children}

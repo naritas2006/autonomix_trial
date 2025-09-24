@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useWallet } from '../context/WalletContext';
 
-export default function EventForm({ refreshEvents }) {
+export default function EventForm({ onEventSubmitted }) {
   const { wallet, contract } = useWallet();
   const [vehicleId, setVehicleId] = useState('');
   const [eventType, setEventType] = useState('');
@@ -13,22 +13,27 @@ export default function EventForm({ refreshEvents }) {
     if (!contract) return alert('Contract not loaded');
 
     try {
+      // Send transaction
       const tx = await contract.logEvent(vehicleId, eventType, ipfsHash);
       await tx.wait();
+
       alert('Event logged successfully!');
       setVehicleId('');
       setEventType('');
       setIpfsHash('');
-      refreshEvents(); // optionally refresh dashboard
+
+      // Call dashboard refresh if provided
+      if (onEventSubmitted) onEventSubmitted();
     } catch (error) {
       console.error('Transaction failed:', error);
-      alert('Transaction failed. Check console.');
+      alert('Transaction failed. Check console for details.');
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto">
       <h2 className="text-xl font-bold text-center text-blush">Log New Road Event</h2>
+
       <input
         type="text"
         placeholder="Vehicle ID / Zone"
@@ -37,6 +42,7 @@ export default function EventForm({ refreshEvents }) {
         className="w-full p-2 border border-violet rounded"
         required
       />
+
       <input
         type="text"
         placeholder="Event Type"
@@ -45,6 +51,7 @@ export default function EventForm({ refreshEvents }) {
         className="w-full p-2 border border-violet rounded"
         required
       />
+
       <input
         type="text"
         placeholder="IPFS Hash (optional)"
@@ -52,7 +59,11 @@ export default function EventForm({ refreshEvents }) {
         onChange={(e) => setIpfsHash(e.target.value)}
         className="w-full p-2 border border-violet rounded"
       />
-      <button type="submit" className="w-full py-2 bg-blush text-white rounded-lg hover:brightness-110 transition">
+
+      <button
+        type="submit"
+        className="w-full py-2 bg-blush text-white rounded-lg hover:brightness-110 transition"
+      >
         Submit Event
       </button>
     </form>
