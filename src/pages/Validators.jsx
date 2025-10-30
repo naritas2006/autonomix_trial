@@ -3,8 +3,9 @@ import { ethers } from 'ethers';
 import AutonomixDPoS_ABI from '../contracts/AutonomixDPoS.json';
 import AUTOXToken_ABI from '../contracts/AUTOXToken.json';
 
-const DPOS_CONTRACT_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-const AUTOX_TOKEN_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const DPOS_CONTRACT_ADDRESS = "0xACA9492685809C431995e9591364165001A59583"; // DPoS
+const AUTOX_TOKEN_ADDRESS = "0x693cf8cb08d57C19139C96D59e7DbC28460FD2A6"; // Token
+const DATASHARING_CONTRACT_ADDRESS = "0xaa1AbEa9ADdfa8FC58e38afD704EAd0C972CEf9B"
 
 const Validators = () => {
   const [validators, setValidators] = useState([]);

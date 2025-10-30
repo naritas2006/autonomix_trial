@@ -2,37 +2,40 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import AutonomixABI from '../contracts/AutonomixDataShare.json';
 import contractAddress from '../contracts/contractAddress.json';
+import DPOS from '../contracts/AutonomixDPoS.json';
 
 const WalletContext = createContext();
 
 export function WalletProvider({ children }) {
   const [wallet, setWallet] = useState(null);
-  const [contract, setContract] = useState(null);
+  const [contracts, setContracts] = useState(null);
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
 
-  const HARDHAT_CHAIN_ID = '0x7A69'; // 31337 in hex
+  const SEPOLIA_CHAIN_ID = '0xaa36a7'; // 11155111 in hex
 
-  // Switch MetaMask network to Hardhat localhost
-  const switchToHardhat = async () => {
+  // --- Switch to Sepolia Network ---
+  const switchToSepolia = async () => {
     if (!window.ethereum) return;
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: HARDHAT_CHAIN_ID }],
+        params: [{ chainId: SEPOLIA_CHAIN_ID }],
       });
     } catch (switchError) {
-      // If network not added, add it
       if (switchError.code === 4902) {
+        // Add Sepolia if not found
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: HARDHAT_CHAIN_ID,
-            chainName: 'Hardhat Localhost',
-            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-            rpcUrls: ['http://127.0.0.1:8545'],
-            blockExplorerUrls: null,
-          }],
+          params: [
+            {
+              chainId: SEPOLIA_CHAIN_ID,
+              chainName: 'Sepolia Test Network',
+              nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://sepolia.infura.io/v3/'], // replace with your Infura/Alchemy URL
+              blockExplorerUrls: ['https://sepolia.etherscan.io'],
+            },
+          ],
         });
       } else {
         console.error('Failed to switch network:', switchError);
@@ -40,7 +43,7 @@ export function WalletProvider({ children }) {
     }
   };
 
-  // Connect MetaMask wallet
+  // --- Connect Wallet ---
   const connectWallet = async () => {
     if (!window.ethereum) {
       alert('MetaMask not found! Install MetaMask extension.');
@@ -48,37 +51,43 @@ export function WalletProvider({ children }) {
     }
 
     try {
-      await switchToHardhat(); // Ensure correct network
+      await switchToSepolia(); // ensure Sepolia network
 
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const _provider = new ethers.BrowserProvider(window.ethereum);
       const _signer = await _provider.getSigner();
       const _wallet = accounts[0];
 
-      const _contract = new ethers.Contract(
+      // ✅ Initialize both contracts
+      const dataShareContract = new ethers.Contract(
         contractAddress.AutonomixDataShare,
         AutonomixABI.abi,
+        _signer
+      );
+
+      const dposContract = new ethers.Contract(
+        contractAddress.AutonomixDPoS,
+        DPOS.abi,
         _signer
       );
 
       setProvider(_provider);
       setSigner(_signer);
       setWallet(_wallet);
-      setContract(_contract);
+      setContracts({ dataShare: dataShareContract, dpos: dposContract });
 
-      console.log('Connected account:', _wallet);
+      console.log('✅ Connected account:', _wallet);
     } catch (error) {
       console.error('User rejected request or error:', error);
     }
   };
 
-  // Disconnect wallet
+  // --- Disconnect Wallet ---
   const disconnectWallet = async () => {
     setWallet(null);
-    setContract(null);
+    setContracts(null);
     setSigner(null);
     setProvider(null);
-    // Optional: reset permissions in MetaMask
     if (window.ethereum?.request) {
       try {
         await window.ethereum.request({
@@ -91,22 +100,21 @@ export function WalletProvider({ children }) {
     }
   };
 
-  // Detect account change
+  // --- Detect Account or Network Change ---
   useEffect(() => {
     if (window.ethereum) {
       const handleAccountsChanged = (accounts) => {
         if (accounts.length === 0) {
           disconnectWallet();
         } else {
-          // Automatically switch to new account
           connectWallet();
         }
       };
 
-      const handleChainChanged = (_chainId) => {
-        if (_chainId !== HARDHAT_CHAIN_ID) {
-          console.warn('Switched to wrong network, reconnecting...');
-          switchToHardhat();
+      const handleChainChanged = (chainId) => {
+        if (chainId !== SEPOLIA_CHAIN_ID) {
+          console.warn('⚠️ Wrong network detected. Switching to Sepolia...');
+          switchToSepolia();
         }
       };
 
@@ -120,13 +128,14 @@ export function WalletProvider({ children }) {
     }
   }, []);
 
+  // --- Provide Context ---
   return (
     <WalletContext.Provider
       value={{
         wallet,
         provider,
         signer,
-        contract,
+        contracts,
         connectWallet,
         disconnectWallet,
       }}
@@ -136,6 +145,7 @@ export function WalletProvider({ children }) {
   );
 }
 
+// --- Custom Hook for Easy Access ---
 export function useWallet() {
   return useContext(WalletContext);
 }
