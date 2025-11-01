@@ -231,7 +231,7 @@ contract AutonomixDPoS is Ownable {
         return currentValidators;
     }
 
-    function addTestValidator(address _validatorAddress) public onlyOwner {
+    function addTestValidator(address _validatorAddress) public {
         require(_validatorAddress != address(0), "Invalid address");
         if (delegates[_validatorAddress].totalStaked == 0) {
             registeredDelegates.push(_validatorAddress);

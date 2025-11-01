@@ -64,7 +64,6 @@ const MapView = () => {
       });
 
       setDataBlocks(formatted);
-      console.log("✅ DataBlocks set for map:", formatted);
     } catch (error) {
       console.error("❌ Error fetching map data:", error);
       alert("Error fetching data for MapView!");

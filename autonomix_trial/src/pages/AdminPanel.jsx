@@ -21,14 +21,17 @@ export default function AdminPanel() {
 
   // 🧠 Fetch all data blocks from the contract
   const fetchEvents = useCallback(async () => {
+    console.log("AdminPanel: fetchEvents called.");
     if (!contracts || !contracts.dataShare) {
-      console.warn("⛔ DataShare contract not available yet.");
+      console.warn("AdminPanel: DataShare contract not available yet. Contracts:", contracts);
       return;
     }
 
     try {
       setLoading(true);
+      console.log("AdminPanel: Calling contracts.dataShare.getAllData()...");
       const allData = await contracts.dataShare.getAllData();
+      console.log("AdminPanel: Received data from getAllData():", allData);
       console.log("📦 All Data Blocks for Admin Panel:", allData);
 
       const formatted = allData.map((d) => {

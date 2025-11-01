@@ -1,221 +1,239 @@
-import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-import AutonomixDPoS_ABI from '../contracts/AutonomixDPoS.json';
-import AUTOXToken_ABI from '../contracts/AUTOXToken.json';
+import React, { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import { useWallet } from "../context/WalletContext";
 
-const DPOS_CONTRACT_ADDRESS = "0xa13C5DA69C3f2ef9bF6C78A2595fc30BEb839820"; // DPoS
-const AUTOX_TOKEN_ADDRESS = "0xf4bB7BB8552fF902F846d5D89869EC13c8A0b86F"; // Token
+import DPoSABI from "../../src/context/AutonomixDPoS.json";
+import AUTOXTokenABI from "../contracts/AUTOXToken.json";
+import contractAddress from "../contracts/contractAddress.json";
 
 const Validators = () => {
   const [validators, setValidators] = useState([]);
-  const [stakeAmount, setStakeAmount] = useState('');
+  const [account, setAccount] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [message, setMessage] = useState("");
+  const [stakeAmount, setStakeAmount] = useState(""); // New state for stake amount
+  const [approvedAmount, setApprovedAmount] = useState(""); // New state for approved amount
+  const [autoxTokenContractInstance, setAutoxTokenContractInstance] = useState(null); // New state for autoxTokenContractInstance
+
+  const { signer, provider, contracts, connectWallet } = useWallet();
+
+  const contractAddressDPoS = "0xACA9492685809C431995e9591364165001A59583"; // replace with your deployed AutonomixDPoS address
+  const autoxTokenAddress = contractAddress.AUTOXToken;
 
   useEffect(() => {
-    fetchValidators();
-  }, []);
+    if (signer && contracts && contracts.dpos) {
+      setAutoxTokenContractInstance(new ethers.Contract(autoxTokenAddress, AUTOXTokenABI, signer));
+    } else {
+      // If signer or dposContract is not available, try to connect wallet
+      connectWallet();
+    }
+  }, [signer, contracts, connectWallet]);
 
-  const fetchValidators = async () => {
-    setLoading(true);
-    setError(null);
-    let noDelegatesFound = false; // Declare here to make it accessible to the outer catch block
+  useEffect(() => {
+    if (contracts?.dpos) {
+      loadValidators();
+    }
+  }, [contracts?.dpos]);
+
+  useEffect(() => {
+    console.log("Debug - signer:", signer);
+    console.log("Debug - autoxTokenContractInstance:", autoxTokenContractInstance);
+    console.log("Debug - approvedAmount:", approvedAmount);
+    console.log("Debug - contracts:", contracts);
+    console.log("Debug - contracts?.dpos:", contracts?.dpos);
+    console.log("Debug - Button disabled status:", !autoxTokenContractInstance || !signer || !approvedAmount);
+  }, [signer, autoxTokenContractInstance, approvedAmount, contracts]);
+
+  const loadValidators = async () => {
     try {
-      if (!window.ethereum) {
-        throw new Error("MetaMask is not installed!");
+      if (!signer) {
+        setMessage("Wallet not connected or signer not available.");
+        return;
       }
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const dposContract = new ethers.Contract(DPOS_CONTRACT_ADDRESS, AutonomixDPoS_ABI, provider);
-
-      // Check if user is connected to get their address
-      let signerAddress = null;
-      try {
-        const signer = await provider.getSigner();
-        signerAddress = await signer.getAddress();
-      } catch (err) {
-        console.log("User not connected or no signer available:", err);
+      if (!contracts?.dpos) {
+        setMessage("DPoS contract not available.");
+        console.log("Debug - loadValidators: contracts?.dpos is null or undefined");
+        return;
       }
 
-      const fetchedValidators = [];
-      let i = 0;
-      while (true) {
-        try {
-          // ... existing code ...
-        } catch (error) {
-          console.warn(`electedValidators(${i}) reverted:`, error.message);
-          break;
-        }
-          let delegateAddress;
-          try {
-            delegateAddress = await dposContract.electedValidators(i);
-            console.log(`Checking elected validator at index ${i}: ${delegateAddress}`);
-          } catch (electedValidatorsError) {
-            console.warn(`electedValidators(${i}) reverted:`, electedValidatorsError.message);
-            console.log("Reached end of elected validators or no validators elected.");
-            break; // Exit the loop if electedValidators reverts
-          }
+      setLoading(true);
+      const userAddr = await signer.getAddress();
+      setAccount(userAddr);
 
-          // Skip if the address is a zero address
-          if (delegateAddress === ethers.ZeroAddress) {
-            console.log(`Skipping zero address at index ${i}`);
-            i++;
-            continue;
-          }
+      // ✅ correct function call (case sensitive)
+      const validatorAddresses = await contracts.dpos.getcurrentValidators();
 
-          let totalDelegateStake = ethers.toBigInt(0);
-          try {
-            totalDelegateStake = await dposContract.delegateStake(delegateAddress);
-          } catch (e) {
-            console.warn(`delegateStake(${delegateAddress}) reverted:`, e.message);
-          }
-
-          let userDelegatorStake = ethers.toBigInt(0);
-          if (signerAddress) {
-            try {
-              userDelegatorStake = await dposContract.getDelegatorStake(delegateAddress, signerAddress);
-            } catch (e) {
-              console.warn(`getDelegatorStake(${delegateAddress}, ${signerAddress}) reverted:`, e.message);
-            }
-          }
-
-          if (totalDelegateStake > 0 || userDelegatorStake > 0) {
-            fetchedValidators.push({
-              address: delegateAddress,
-              stake: ethers.formatEther(totalDelegateStake), // Total stake of the delegate
-              userStake: ethers.formatEther(userDelegatorStake), // Stake of the connected user with this delegate
-              votes: ethers.formatEther(totalDelegateStake), // Assuming votes are equal to total stake for now
-            });
-          }
-          i++;
-        }
-
-        // After the loop, check if the signerAddress is an elected validator and not already added
-        if (signerAddress) {
-          const userAlreadyListed = fetchedValidators.some(validator => validator.address === signerAddress);
-          if (!userAlreadyListed) {
-            let signerTotalStake = ethers.toBigInt(0);
-            try {
-              signerTotalStake = await dposContract.delegateStake(signerAddress);
-            } catch (e) {
-              console.warn(`delegateStake(${signerAddress}) for signer itself reverted:`, e.message);
-            }
-
-            if (signerTotalStake > 0) {
-              fetchedValidators.push({
-                address: signerAddress,
-                stake: ethers.formatEther(signerTotalStake),
-                userStake: ethers.formatEther(signerTotalStake), // If signer is a validator, their userStake is their total stake
-                votes: ethers.formatEther(signerTotalStake),
-              });
-            }
-          }
-        }
-      console.log("Final fetched validators:", fetchedValidators);
-      setValidators(fetchedValidators);
-
+      console.log("Fetched validators:", validatorAddresses);
+      setValidators(validatorAddresses);
+      setMessage(`Fetched ${validatorAddresses.length} validators.`);
     } catch (err) {
-      if (noDelegatesFound) {
-        // If no delegates were found, it's an expected scenario, don't set an error
-        console.log("No delegates registered, gracefully handled.");
-      } else {
-        console.error("Error fetching validators:", err);
-        setError(err.message);
-      }
+      console.error("Error fetching validators:", err);
+      setMessage("Error fetching validators (check console).");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStake = async () => {
-    setLoading(true);
-    setError(null);
+  const addTestValidator = async () => {
     try {
       if (!window.ethereum) {
-        throw new Error("MetaMask is not installed!");
-      }
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const dposContract = new ethers.Contract(DPOS_CONTRACT_ADDRESS, AutonomixDPoS_ABI, signer);
-      const autoxTokenContract = new ethers.Contract(AUTOX_TOKEN_ADDRESS, AUTOXToken_ABI, signer);
-
-      const signerAddress = await signer.getAddress();
-
-      const userBalance = await autoxTokenContract.balanceOf(signerAddress);
-      console.log("User AUTOX Token Balance:", ethers.formatEther(userBalance));
-
-      const currentAllowance = await autoxTokenContract.allowance(signerAddress, DPOS_CONTRACT_ADDRESS);
-      console.log("Current Allowance for DPoS Contract:", ethers.formatEther(currentAllowance));
-
-      const amount = ethers.parseEther(stakeAmount);
-
-      if (userBalance < amount) {
-        alert("Error: Insufficient AUTOX Token balance.");
-        setLoading(false);
+        setMessage("MetaMask not detected");
         return;
       }
 
-      if (currentAllowance < amount) {
-        // Approve the DPoS contract to spend AUTOXToken
-        const approveTx = await autoxTokenContract.approve(DPOS_CONTRACT_ADDRESS, amount);
-        await approveTx.wait();
-        alert('Approval successful! Now please confirm the staking transaction.');
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const dposContract = new ethers.Contract(contractAddressDPoS, DPoSABI.abi, signer);
+
+      // ✅ this function exists in your contract
+      const tx = await dposContract.addTestValidator(account);
+      await tx.wait();
+
+      setMessage("Test validator added successfully!");
+      loadValidators();
+    } catch (err) {
+      console.error("Error adding validator:", err);
+      setMessage("Error adding validator (check console).");
+    }
+  };
+
+  // New function to handle staking
+  const handleStake = async () => {
+    try {
+      if (!signer) {
+        setMessage("Wallet not connected or signer not available.");
+        return;
+      }
+      if (!contracts?.dpos) {
+        setMessage("DPoS contract not available.");
+        console.log("Debug - handleStake: contracts?.dpos is null or undefined");
+        return;
+      }
+      if (!stakeAmount || isNaN(stakeAmount) || parseFloat(stakeAmount) <= 0) {
+        setMessage("Please enter a valid stake amount.");
+        return;
       }
 
-      const stakeTx = await dposContract.stake(signer.address, amount);
-      await stakeTx.wait();
-      alert('Stake successful!');
-      setStakeAmount('');
-      fetchValidators(); // Refresh validator list
+      // Convert stakeAmount to Wei
+      const amountInWei = ethers.parseUnits(stakeAmount, "ether");
+
+      // Check current allowance
+      const currentAllowance = await autoxTokenContractInstance.allowance(await signer.getAddress(), contracts.dpos.target);
+      if (currentAllowance < amountInWei) {
+        setMessage("Insufficient allowance. Please approve more tokens.");
+        return;
+      }
+
+      // The stake function in AutonomixDPoS.sol takes _delegate and _amount
+      // We'll use the connected account as the delegate for simplicity here.
+      const tx = await contracts.dpos.stake(await signer.getAddress(), amountInWei);
+      await tx.wait();
+
+      setMessage(`Successfully staked ${stakeAmount} tokens!`);
+      setStakeAmount(""); // Clear input after staking
+      loadValidators(); // Refresh validator list
     } catch (err) {
-      console.error("Error staking:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      console.error("Error staking tokens:", err);
+      setMessage("Error staking tokens (check console).");
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!autoxTokenContractInstance || !signer || !approvedAmount) {
+      console.error("AutoxToken contract, signer, or approved amount not available.");
+      return;
+    }
+
+    try {
+      const amountToApprove = ethers.parseUnits(approvedAmount, 18); // Assuming 18 decimals
+      console.log("Approving DPoS contract at address:", contracts.dpos.target);
+      const tx = await autoxTokenContractInstance.connect(signer).approve(contracts.dpos.target, amountToApprove);
+      await tx.wait();
+      console.log("Tokens approved successfully!");
+      alert("Tokens approved successfully!");
+    } catch (error) {
+      console.error("Error approving tokens:", error);
+      alert(`Error approving tokens: ${error.message}`);
     }
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Validators</h1>
+    <div className="min-h-screen bg-soft-gradient bg-cover text-violet font-sans p-8">
+      <h2 className="text-4xl md:text-5xl font-bold text-blush font-heading mb-6">Validators Dashboard</h2>
+      <p className="mb-4 text-violet text-lg">Connected Account: {account}</p>
 
-      {loading && <p>Loading...</p>}
-      {error && <p className="text-red-500">Error: {error}</p>}
-
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">Stake Tokens</h2>
-        <input
-          type="number"
-          className="border p-2 rounded mr-2"
-          placeholder="Amount to stake"
-          value={stakeAmount}
-          onChange={(e) => setStakeAmount(e.target.value)}
-        />
+      <div className="flex flex-wrap justify-center gap-4 mb-6">
         <button
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-          onClick={handleStake}
+          onClick={loadValidators}
+          className="px-6 py-3 bg-blush text-white rounded-2xl font-semibold hover:brightness-110 transition"
           disabled={loading}
         >
-          Stake
+          {loading ? "Loading..." : "Refresh Validators"}
+        </button>
+
+        <button
+          onClick={addTestValidator}
+          className="px-6 py-3 border border-blush text-blush rounded-2xl font-semibold hover:bg-blush hover:text-white transition"
+        >
+          Add Test Validator
         </button>
       </div>
 
-      <div>
-        <h2 className="text-2xl font-semibold mb-4">Current Validators</h2>
-        {validators.length === 0 ? (
-          <p>No validators found.</p>
-        ) : (
-          <ul>
-            {validators.map((validator, index) => (
-              <li key={index} className="border p-4 mb-2 rounded">
-                <p>Address: {validator.address}</p>
-                <p>Total Stake: {validator.stake}</p>
-                {validator.userStake && parseFloat(validator.userStake) > 0 && (
-                  <p>Your Stake: {validator.userStake}</p>
-                )}
-                <p>Votes: {validator.votes}</p>
+      {/* Approve Tokens Section */}
+      <div className="mt-8 max-w-5xl mx-auto bg-white bg-opacity-80 backdrop-blur-lg border border-borderLight p-6 rounded-2xl shadow-md">
+        <h3 className="text-2xl font-semibold text-blush font-heading mb-4">Approve Tokens for Staking</h3>
+        <p className="text-violet mb-4">
+          Before staking, you need to approve the DPoS contract to spend your AUTOX tokens.
+        </p>
+        <input
+          type="number"
+          value={approvedAmount}
+          onChange={(e) => setApprovedAmount(e.target.value)}
+          placeholder="Amount to approve (e.g., 100)"
+          className="w-full p-3 rounded-lg border border-gray-300 bg-white text-gray-900 mb-4 focus:outline-none focus:ring-2 focus:ring-blush"
+        />
+        <button
+          onClick={handleApprove}
+          className="px-6 py-3 bg-violet-500 text-white rounded-2xl font-semibold hover:brightness-110 transition w-full"
+          disabled={!autoxTokenContractInstance || !signer || !approvedAmount}
+        >
+          Approve Tokens
+        </button>
+      </div>
+
+      {/* New Staking Section */}
+      <div className="mt-8 max-w-5xl mx-auto bg-white bg-opacity-80 backdrop-blur-lg border border-borderLight p-6 rounded-2xl shadow-md">
+        <h3 className="text-2xl font-semibold text-blush font-heading mb-4">Stake Tokens</h3>
+        <input
+          type="number"
+          value={stakeAmount}
+          onChange={(e) => setStakeAmount(e.target.value)}
+          placeholder="Amount to stake (e.g., 100)"
+          className="w-full p-3 rounded-lg border border-gray-300 bg-white text-gray-900 mb-4 focus:outline-none focus:ring-2 focus:ring-blush"
+        />
+        <button
+          onClick={handleStake}
+          className="px-6 py-3 bg-blush text-white rounded-2xl font-semibold hover:brightness-110 transition w-full"
+          disabled={!contracts?.dpos || !signer || !stakeAmount}
+        >
+          Stake Tokens
+        </button>
+      </div>
+
+      <p className="mt-4 text-lg text-violet">{message}</p>
+
+      <div className="mt-8 max-w-5xl mx-auto bg-white bg-opacity-80 backdrop-blur-lg border border-borderLight p-6 rounded-2xl shadow-md">
+        <h3 className="text-2xl font-semibold text-blush font-heading mb-4">Current Validators</h3>
+        {validators.length > 0 ? (
+          <ul className="list-disc list-inside space-y-2">
+            {validators.map((addr, i) => (
+              <li key={i} className="text-violet text-lg">
+                {addr}
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="text-violet mt-2 text-lg">No validators found.</p>
         )}
       </div>
     </div>
