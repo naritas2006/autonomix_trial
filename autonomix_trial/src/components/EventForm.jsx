@@ -14,18 +14,18 @@ export default function EventForm({ onEventSubmitted }) {
     if (!contracts || !contracts.dataShare) return alert('DataShare Contract not loaded');
 
     try {
-      const carIdBytes32 = ethers.encodeBytes32String(vehicleId);
-      
-      // Combine eventType and ipfsHash into a single data object
+      // Combine eventType, ipfsHash, vehicleId, and a timestamp into a single data object for uniqueness
       const eventData = JSON.stringify({
         eventType: eventType,
-        ipfsHash: ipfsHash
+        ipfsHash: ipfsHash,
+        vehicleId: vehicleId, // Include vehicleId for uniqueness
+        timestamp: Date.now() // Include a timestamp for uniqueness
       });
       // Hash the eventData to get a bytes32 hash
       const dataHashBytes32 = ethers.keccak256(ethers.toUtf8Bytes(eventData));
 
-      // Send transaction
-      const tx = await contracts.dataShare.uploadData(carIdBytes32, dataHashBytes32);
+      // Send transaction: metadata is vehicleId (string), dataHash is the unique hash
+      const tx = await contracts.dataShare.uploadData(eventData, dataHashBytes32);
       await tx.wait();
 
       alert('Event logged successfully!');

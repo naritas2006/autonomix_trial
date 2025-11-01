@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import CarDashboard from './pages/CarDashboard';
-import AlertsFeed from './pages/AlertsFeed';
+import LiveAlertsFeed from './pages/LiveAlertsFeed';
 import MapView from './pages/MapView';
 import AdminPanel from './pages/AdminPanel';
 import About from './pages/About';
@@ -17,7 +17,7 @@ function App() {
       <Route path="/" element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="car" element={<CarDashboard />} />
-        <Route path="alerts" element={<AlertsFeed />} />
+        <Route path="alerts" element={<LiveAlertsFeed />} />
         <Route path="map" element={<MapView />} />
         <Route path="admin" element={<AdminPanel />} />
         <Route path="about" element={<About />} />
